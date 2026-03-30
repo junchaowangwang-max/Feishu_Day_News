@@ -28,37 +28,53 @@ jobs:
         run: |
           python -c "
           import os, requests
-          import json
 
-          def get_toutiao_hot():
+          def get_zhihu_hot():
               try:
-                  # 使用今日头条热榜接口，这个非常稳定
-                  url = 'https://is.snssdk.com/api/suggest_words/v1/?business_id=top_referral_widget&from=landing&refer=search&source=landing'
-                  res = requests.get(url, timeout=10)
+                  # 知乎热榜 API，格式极其标准
+                  url = 'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total'
+                  headers = {
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                  }
+                  res = requests.get(url, headers=headers, timeout=15)
+                  res.raise_for_status() # 确保请求成功
+                  
                   data = res.json()
+                  items = data.get('data', [])[:10]
                   
-                  # 提取前10条热点新闻
-                  hot_list = data.get('data', [])[0].get('words', [])[:10]
                   news_text = ''
-                  for idx, item in enumerate(hot_list):
-                      word = item.get('word')
-                      news_text += f'{idx+1}. {word}\n'
+                  for idx, item in enumerate(items):
+                      # 提取标题
+                      title = item.get('target', {}).get('title')
+                      # 提取链接
+                      id = item.get('target', {}).get('id')
+                      link = f'https://www.zhihu.com/question/{id}'
+                      
+                      if title:
+                          news_text += f'{idx+1}. {title}\n   链接: {link}\n\n'
                   
-                  return news_text if news_text else '今日暂时没有热点新闻。'
+                  return news_text if news_text else '暂时没有抓取到热榜内容。'
               except Exception as e:
-                  return f'获取新闻失败，请稍后再试。错误: {str(e)}'
+                  return f'获取热榜失败，错误详情: {str(e)}'
 
           def send_to_feishu(webhook_url, content):
+              # 保持 text 格式以确保飞书机器人 100% 兼容
               payload = {
                   'msg_type': 'text',
                   'content': {
-                      'text': f'📅 今日头条热榜精选\n\n{content}\n关键词：每日'
+                      'text': f'📅 知乎实时热榜精选\n\n{content}关键词：每日'
                   }
               }
-              requests.post(webhook_url, json=payload)
+              try:
+                  r = requests.post(webhook_url, json=payload, timeout=10)
+                  print(f'发送结果: {r.text}')
+              except Exception as e:
+                  print(f'发送请求失败: {e}')
 
           webhook = os.environ.get('FEISHU_WEBHOOK')
           if webhook:
-              content = get_toutiao_hot()
+              content = get_zhihu_hot()
               send_to_feishu(webhook, content)
+          else:
+              print('未配置 FEISHU_WEBHOOK')
           "
