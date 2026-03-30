@@ -1,0 +1,69 @@
+name: 飞书每日新闻推送
+
+on:
+  schedule:
+    # 每天北京时间早上 8:00 运行 (UTC 0:00)
+    - cron: '0 0 * * *'
+  # 支持手动点击按钮触发测试
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: 安装依赖库
+        run: pip install requests beautifulsoup4
+
+      - name: 执行抓取与推送
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+        run: |
+          python -c "
+          import os, requests
+          from bs4 import BeautifulSoup
+
+          def get_ithome_hot():
+              try:
+                  url = 'https://www.ithome.com/'
+                  headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                  res = requests.get(url, headers=headers, timeout=10)
+                  res.encoding = 'utf-8'
+                  soup = BeautifulSoup(res.text, 'html.parser')
+                  # 抓取 IT 之家首页热点新闻
+                  items = soup.select('.lst-1 li a')[:10]
+                  news_list = []
+                  for a in items:
+                      title = a.get('title')
+                      link = a.get('href')
+                      if title:
+                          news_list.append(f'• [{title}]({link})')
+                  return '\n'.join(news_list)
+              except Exception as e:
+                  return f'抓取失败: {str(e)}'
+
+          def send_to_feishu(webhook_url, content):
+              # 消息体结构：必须包含关键词“每日”
+              payload = {
+                  'msg_type': 'markdown',
+                  'content': {
+                      'text': f'### 📅 每日科技热点精选\n\n{content}\n\n---\n*推送时间：北京时间 08:00*'
+                  }
+              }
+              response = requests.post(webhook_url, json=payload)
+              print(f'推送状态码: {response.status_code}, 返回信息: {response.text}')
+
+          webhook = os.environ.get('FEISHU_WEBHOOK')
+          if webhook:
+              news_content = get_ithome_hot()
+              send_to_feishu(webhook, news_content)
+          else:
+              print('错误: 未找到 FEISHU_WEBHOOK 配置')
+          "
