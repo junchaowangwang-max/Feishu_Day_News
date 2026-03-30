@@ -33,37 +33,34 @@ jobs:
           def get_ithome_hot():
               try:
                   url = 'https://www.ithome.com/'
-                  headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                  headers = {'User-Agent': 'Mozilla/5.0'}
                   res = requests.get(url, headers=headers, timeout=10)
                   res.encoding = 'utf-8'
                   soup = BeautifulSoup(res.text, 'html.parser')
-                  # 抓取 IT 之家首页热点新闻
                   items = soup.select('.lst-1 li a')[:10]
-                  news_list = []
+                  news_text = ''
                   for a in items:
                       title = a.get('title')
                       link = a.get('href')
                       if title:
-                          news_list.append(f'• [{title}]({link})')
-                  return '\n'.join(news_list)
+                          news_text += f'• {title}\n  链接: {link}\n\n'
+                  return news_text
               except Exception as e:
                   return f'抓取失败: {str(e)}'
 
           def send_to_feishu(webhook_url, content):
-              # 消息体结构：必须包含关键词“每日”
+              # 这里改为最基础的 text 格式，确保 100% 兼容
               payload = {
-                  'msg_type': 'markdown',
+                  'msg_type': 'text',
                   'content': {
-                      'text': f'### 📅 每日科技热点精选\n\n{content}\n\n---\n*推送时间：北京时间 08:00*'
+                      'text': f'📅 每日科技热点精选\n\n{content}关键词：每日'
                   }
               }
               response = requests.post(webhook_url, json=payload)
-              print(f'推送状态码: {response.status_code}, 返回信息: {response.text}')
+              print(f'状态码: {response.status_code}, 返回内容: {response.text}')
 
           webhook = os.environ.get('FEISHU_WEBHOOK')
           if webhook:
               news_content = get_ithome_hot()
               send_to_feishu(webhook, news_content)
-          else:
-              print('错误: 未找到 FEISHU_WEBHOOK 配置')
           "
