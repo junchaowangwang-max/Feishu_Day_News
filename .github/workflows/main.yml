@@ -28,39 +28,37 @@ jobs:
         run: |
           python -c "
           import os, requests
-          from bs4 import BeautifulSoup
+          import json
 
-          def get_ithome_hot():
+          def get_toutiao_hot():
               try:
-                  url = 'https://www.ithome.com/'
-                  headers = {'User-Agent': 'Mozilla/5.0'}
-                  res = requests.get(url, headers=headers, timeout=10)
-                  res.encoding = 'utf-8'
-                  soup = BeautifulSoup(res.text, 'html.parser')
-                  items = soup.select('.lst-1 li a')[:10]
+                  # 使用今日头条热榜接口，这个非常稳定
+                  url = 'https://is.snssdk.com/api/suggest_words/v1/?business_id=top_referral_widget&from=landing&refer=search&source=landing'
+                  res = requests.get(url, timeout=10)
+                  data = res.json()
+                  
+                  # 提取前10条热点新闻
+                  hot_list = data.get('data', [])[0].get('words', [])[:10]
                   news_text = ''
-                  for a in items:
-                      title = a.get('title')
-                      link = a.get('href')
-                      if title:
-                          news_text += f'• {title}\n  链接: {link}\n\n'
-                  return news_text
+                  for idx, item in enumerate(hot_list):
+                      word = item.get('word')
+                      news_text += f'{idx+1}. {word}\n'
+                  
+                  return news_text if news_text else '今日暂时没有热点新闻。'
               except Exception as e:
-                  return f'抓取失败: {str(e)}'
+                  return f'获取新闻失败，请稍后再试。错误: {str(e)}'
 
           def send_to_feishu(webhook_url, content):
-              # 这里改为最基础的 text 格式，确保 100% 兼容
               payload = {
                   'msg_type': 'text',
                   'content': {
-                      'text': f'📅 每日科技热点精选\n\n{content}关键词：每日'
+                      'text': f'📅 今日头条热榜精选\n\n{content}\n关键词：每日'
                   }
               }
-              response = requests.post(webhook_url, json=payload)
-              print(f'状态码: {response.status_code}, 返回内容: {response.text}')
+              requests.post(webhook_url, json=payload)
 
           webhook = os.environ.get('FEISHU_WEBHOOK')
           if webhook:
-              news_content = get_ithome_hot()
-              send_to_feishu(webhook, news_content)
+              content = get_toutiao_hot()
+              send_to_feishu(webhook, content)
           "
